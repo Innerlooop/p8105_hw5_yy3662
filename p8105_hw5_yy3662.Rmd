@@ -1,0 +1,149 @@
+---
+title: "p8105_hw5_yy3662"
+author: "Yunyi Yang"
+date: "2025-11-10"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Problem 1
+
+```{r}
+library(ggplot2)
+library(tibble)
+bd <- function(n) {
+  birth <- sample(365L, n, replace = TRUE)
+  length(unique(birth)) < n
+}
+scale <- seq(2, 50, 1)
+rep <- 10000
+prob <- rep(0, 49)
+for (i in 2:50) {
+  temp <- 0
+  for (j in 1:rep) {
+    temp <- temp + bd(i)
+  }
+  prob[i-1] <- temp / rep
+}
+data <- tibble(scale, prob)
+ggplot(data, aes(x = scale, y = prob)) +
+  geom_line() +
+  geom_point()
+```
+
+Overall, the probability increases as the number of people increasing. The slope of probability increases as scale increasing from 2 to 25, then slope of probability decreases as scale increasing from 25 to 50. The probability approximates to 1 as scale increasing.
+
+# Problem 2
+
+```{r}
+library(ggplot2)
+library(tibble)
+library(dplyr)
+n <- 50
+sigma <- 5
+mu <- seq(0, 6, 1)
+power <- rep(0, 7)
+muhat <- rep(0, 7)
+muhat_reject_h0 <- rep(0, 7)
+alpha <- 0.05
+rep <- 5000
+for (i in 1:7) {
+  temp = 0
+  mean_reject_h0 = 0
+  condition_count = 0
+  mean = 0
+  for(j in 1:rep) {
+    x <- rnorm(n, mu[i], sigma)
+    test <- broom::tidy(t.test(x, mu = 0, conf.level = 1 - alpha))
+    condition <- pull(test, p.value) < alpha
+    mean <- mean + pull(test, estimate)
+    if (condition == TRUE) {
+      mean_reject_h0 <- pull(test, estimate) + mean_reject_h0
+      condition_count = condition_count + 1
+    }
+    temp <- temp + condition
+  }
+  muhat[i] <- mean / rep
+  muhat_reject_h0[i] <- mean_reject_h0 / condition_count
+  power[i] <- temp / rep
+}
+```
+
+```{r}
+data1 <- tibble(mu, power)
+data2 <- tibble(mu, muhat)
+data3 <- tibble(mu, muhat_reject_h0)
+ggplot(data1, aes(x = mu, y = power)) +
+  geom_line() +
+  geom_point() +
+  scale_x_continuous(
+    breaks = c(0, 1, 2, 3, 4, 5, 6)) +
+  geom_text(aes(label = power), vjust = -1, size = 3) +
+  labs(x = "mu", y = "Power")
+```
+
+As the effect size increasing, the power approximately increases and approaches to 1 since the true value is away from the hypothesis value H0 = 0.
+
+```{r}
+ggplot(data2, aes(x = mu, y = muhat)) +
+  geom_line() +
+  geom_point() +
+  scale_x_continuous(
+    breaks = c(1, 2, 3, 4, 5, 6)) +
+  geom_text(aes(label = round(muhat, 3)), vjust = -1, size = 3) +
+  labs(x = "mu", y = "mu hat")
+  
+
+ggplot(data3, aes(x = mu, y = muhat_reject_h0)) +
+  geom_line() +
+  geom_point() +
+  scale_x_continuous(
+    breaks = c(1, 2, 3, 4, 5, 6)) +
+  geom_text(aes(label = round(muhat_reject_h0, 3)), vjust = -1, size = 3) +
+  labs(x = "mu", y = "mu hat which reject H0")
+```
+
+Yes, the sample average of $\mu$ across tests for which the null is rejected approximately equal to the true value of $\hat{\mu}$ because we used two-sided t-test, which means our reject set is symmetric with $\mu$ in two sides. So we know $\mathbb{E}\!\left[\hat{\mu}\mid \text{reject }H_0\right] = \mu$.
+
+# Problem 3
+
+```{r}
+library(tidyverse)
+library(rvest)
+library(readr)
+library(ggplot2)
+data <- read.csv("./Data/homicide-data.csv")
+data <- data |>
+  mutate(city_state = paste(city, state, sep = ", ")) |>
+  group_by(city_state) |>
+  summarise(
+    total = n(),
+    unsolve = sum(disposition %in% c("Closed without arrest", "Open/No arrest"))
+  )
+test <- data |>
+  filter(city_state == "Baltimore, MD")
+result <- prop.test(x = test$unsolve, n = test$total)
+clean_result <- broom::tidy(result)
+proportion <- pull(clean_result)
+CI_low <- pull(clean_result, conf.low)
+CI_high <- pull(clean_result, conf.high)
+
+allcity <- data |>
+  filter(city_state != "Tulsa, AL") |> # only have one value
+  mutate(
+    pt_out = map2(unsolve, total, ~ prop.test(.x, .y)),
+    tidy   = map(pt_out, broom::tidy)
+  ) |>
+  unnest(tidy) |>
+  select(city_state, proportion_new = estimate, conf.low, conf.high) |>
+  mutate(city_state = fct_reorder(city_state, proportion_new))
+ggplot(allcity, aes(x = proportion_new, y = city_state)) +
+  geom_point() +
+  geom_errorbar(aes(xmin = conf.low, xmax = conf.high)) +
+  theme(axis.text.y = element_text(size = 7)) +
+  geom_text(aes(label = round(proportion_new, 3)), size = 2.5, nudge_x = allcity$conf.high - allcity$proportion_new + 0.015) +
+  labs(x = "Proportion of unsolved homicides", y = "Cities")
+```
