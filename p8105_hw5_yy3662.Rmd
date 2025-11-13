@@ -39,6 +39,7 @@ Overall, the probability increases as the number of people increasing. The slope
 # Problem 2
 
 ```{r}
+set.seed(8105)
 library(ggplot2)
 library(tibble)
 library(dplyr)
